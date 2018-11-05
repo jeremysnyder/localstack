@@ -130,6 +130,8 @@ def send_notifications(method, bucket_name, object_path):
             # TODO: support more detailed methods, e.g., DeleteMarkerCreated
             # http://docs.aws.amazon.com/AmazonS3/latest/dev/NotificationHowTo.html
             api_method = {'PUT': 'Put', 'POST': 'Post', 'DELETE': 'Delete'}[method]
+            if action == 'ObjectCreated' and method == 'POST':
+                api_method = 'CompleteMultipartUpload'
             event_name = '%s:%s' % (action, api_method)
             if (event_type_matches(config['Event'], action, api_method) and
                     filter_rules_match(config.get('Filter'), object_path)):
@@ -496,6 +498,8 @@ class ProxyListenerS3(ProxyListener):
 
         bucket_name_in_host = headers['host'].startswith(bucket_name)
 
+        # TODO Not sure if this is the best way to determine the multipart upload or not
+        multipart_upload_complete = method is 'POST' and 'uploadId' in parsed.query
         should_send_notifications = all([
             method in ('PUT', 'POST', 'DELETE'),
             '/' in path[1:] or bucket_name_in_host,
@@ -504,7 +508,7 @@ class ProxyListenerS3(ProxyListener):
             bucket_name_in_host or (len(path[1:].split('/')) > 1 and len(path[1:].split('/')[1]) > 0),
             # don't send notification if url has a query part (some/path/with?query)
             # (query can be one of 'notification', 'lifecycle', 'tagging', etc)
-            not parsed.query
+            not parsed.query or multipart_upload_complete
         ])
 
         # get subscribers and send bucket notifications
